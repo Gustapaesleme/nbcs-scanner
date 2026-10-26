@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#050F14">
+<title>Scanner ao vivo · New Blue Card Shop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: camera stage fills the screen with a card-shaped guide; the session list sits in a bottom panel (side panel on wide screens). Dark only: it is a camera tool. */
+:root{
+  --bg:#050F14; --surface:#09181F; --surface-2:#0E232C; --line:#1A3440; --fg:#DAEBF1; --muted:#8DADB8;
+  --accent:#3FC3D6; --accent-ink:#04222A; --teal:#2BB8B9; --gold:#EABF3A;
+  --ok:#47C98A; --warn:#F2B04A; --err:#FF7A7A;
+  --f-display:"Syne","Avenir Next","Segoe UI",sans-serif;
+  --f-body:"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--f-body);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+h1,h2{font-family:var(--f-display);font-weight:800;margin:0;letter-spacing:-.01em;text-wrap:balance}
+[hidden]{display:none!important}
+
+.app{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) 33dvh}
+.top{display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top,0px)) 16px 8px;background:var(--bg);border-bottom:1px solid var(--line);z-index:3}
+.top svg{width:32px;height:32px;flex:none}
+.top h1{font-size:17px;line-height:1.1;flex:1;min-width:0}
+.top h1 small{display:block;font:600 11px/1.2 var(--f-body);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.chip[data-s="ok"] .dot{background:var(--ok)} .chip[data-s="warn"] .dot{background:var(--warn)} .chip[data-s="err"] .dot{background:var(--err)}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;cursor:pointer;flex:none}
+.iconbtn svg{width:20px;height:20px}
+
+/* stage */
+.stage{position:relative;overflow:hidden;background:#000;min-height:0}
+.stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.guide{position:absolute;border-radius:4.5%/3.2%;box-shadow:0 0 0 100vmax rgba(2,8,11,.52);transition:box-shadow .2s;pointer-events:none}
+.guide::before{content:"";position:absolute;inset:-3px;border-radius:inherit;border:3px solid rgba(218,235,241,.55);transition:border-color .15s}
+.guide[data-s="hold"]::before{border-color:var(--gold)}
+.guide[data-s="shot"]::before{border-color:var(--ok)}
+.guide[data-s="swap"]::before{border-color:var(--accent);border-style:dashed}
+.guide .bar{position:absolute;left:8%;right:8%;bottom:-14px;height:5px;border-radius:9px;background:rgba(255,255,255,.18);overflow:hidden}
+.guide .bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .1s linear}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.flash.go{animation:fl .35s ease-out}
+@keyframes fl{0%{opacity:.7}100%{opacity:0}}
+.status[data-k="ok"]{border-color:var(--ok);color:var(--ok)} .status[data-k="warn"]{border-color:var(--warn);color:var(--warn)} .status[data-k="err"]{border-color:var(--err);color:var(--err)}
+.status{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(5,15,20,.82);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px;white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;z-index:2}
+.stage .start{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;background:radial-gradient(ellipse at center,#0E232C 0,#050F14 70%)}
+.stage .start .in{display:grid;gap:14px;max-width:340px;justify-items:center}
+
+/* panel */
+.panel{background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-rows:auto auto minmax(0,1fr);min-height:0;padding-bottom:env(safe-area-inset-bottom,0px)}
+.ctrls{display:flex;gap:8px;padding:10px 16px;overflow-x:auto;scrollbar-width:none}
+.ctrls::-webkit-scrollbar{display:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:12px;padding:10px 14px;font-weight:700;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--fg)}
+.btn svg{width:18px;height:18px;flex:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.small{padding:6px 10px;border-radius:9px;font-size:13px}
+.btn.ghost{background:transparent}
+.btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.sumrow{display:flex;justify-content:space-between;gap:10px;padding:0 16px 6px;font-size:12px;color:var(--muted)}
+.list{overflow-y:auto;padding:0 16px 14px;display:grid;gap:8px;align-content:start}
+.empty{color:var(--muted);font-size:13px;border:1px dashed var(--line);border-radius:12px;padding:12px}
+.it{display:grid;grid-template-columns:44px 1fr;gap:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.it[data-s="logged"]{border-color:color-mix(in srgb,var(--ok) 55%,var(--line))}
+.it[data-s="review"]{border-color:color-mix(in srgb,var(--warn) 60%,var(--line))}
+.it[data-s="error"]{border-color:color-mix(in srgb,var(--err) 60%,var(--line))}
+.it[data-s="undone"]{opacity:.55}
+.it img{width:44px;aspect-ratio:63/88;object-fit:cover;border-radius:4px;background:var(--bg)}
+.it .tx{min-width:0;display:grid;gap:2px}
+.it b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .meta{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .st{font-size:12.5px;font-weight:700}
+.st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.err{color:var(--err)} .st.info{color:var(--accent)}
+.it .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:5px;padding:1px 6px;margin-right:6px}
+.tag.pok{color:var(--gold);background:color-mix(in srgb,var(--gold) 14%,transparent)}
+.tag.lor{color:var(--teal);background:color-mix(in srgb,var(--teal) 16%,transparent)}
+.edit{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:6px}
+.edit label{display:grid;gap:2px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:0}
+.edit input,.edit select{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:14px;text-transform:none;letter-spacing:0;color:var(--fg)}
+.edit .w{grid-column:1/-1}
+.spin{width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;display:inline-block;vertical-align:-2px;margin-right:4px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* setup + settings */
+.sheet{position:fixed;inset:0;background:rgba(2,8,11,.7);display:grid;place-items:end center;z-index:10}
+.sheet .card{width:min(560px,100%);max-height:92dvh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px));display:grid;gap:14px}
+@media (min-width:700px){.sheet{place-items:center}.sheet .card{border-radius:20px}}
+.f{display:grid;gap:4px}
+.f label{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.f input,.f select{width:100%;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.note{font-size:13px;border-radius:10px;padding:9px 12px;background:var(--surface-2);border-left:3px solid var(--accent)}
+.note.err{border-left-color:var(--err)} .note.ok{border-left-color:var(--ok)}
+ol.steps{margin:0;padding-left:20px;display:grid;gap:4px;color:var(--muted);font-size:14px}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:600}
+.toggle input{width:22px;height:22px;accent-color:var(--accent)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(64px + env(safe-area-inset-top,0px));background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:12px;font-weight:700;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+
+@media (min-width:900px){
+  .app{grid-template-columns:1fr 400px;grid-template-rows:auto minmax(0,1fr)}
+  .top{grid-column:1/-1}
+  .panel{max-height:none;border-top:0;border-left:1px solid var(--line)}
+  .toast{left:auto;right:16px;transform:none}
+}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.flash.go{animation:none}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A7BFF"/><stop offset="1" stop-color="#14B8B9"/></linearGradient>
+  <linearGradient id="ms" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE38A"/><stop offset="1" stop-color="#EABF3A"/></linearGradient>
+  <symbol id="nbmark" viewBox="0 0 128 128"><g transform="rotate(-10 60 68)"><rect x="29" y="25" width="62" height="86" rx="9" fill="url(#mg)"/><rect x="34.5" y="30.5" width="51" height="75" rx="5" fill="none" stroke="#FFFFFF" stroke-opacity=".38" stroke-width="2.4"/></g><path d="M90 5 C94.5 25.5 94.5 25.5 115 30 C94.5 34.5 94.5 34.5 90 55 C85.5 34.5 85.5 34.5 65 30 C85.5 25.5 85.5 25.5 90 5Z" fill="url(#ms)"/></symbol>
+</defs></svg>
+
+<div class="app">
+  <header class="top">
+    <svg aria-hidden="true"><use href="#nbmark"/></svg>
+    <h1><small>New Blue Card Shop</small>Scanner ao vivo</h1>
+    <span class="chip" id="chip-sheet" data-s="idle"><span class="dot"></span><span id="chip-sheet-t">Planilha</span></span>
+    <button class="iconbtn" id="btn-settings" type="button" aria-label="Configurações">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <main class="stage" id="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="guide" id="guide" hidden><div class="bar"><i id="hold-bar"></i></div></div>
+    <div class="flash" id="flash"></div>
+    <div class="status" id="status" hidden role="status" aria-live="polite"></div>
+    <div class="start" id="start">
+      <div class="in">
+        <svg width="64" height="64" aria-hidden="true"><use href="#nbmark"/></svg>
+        <h2>Coloque a carta, ela entra no estoque</h2>
+        <p class="muted" style="margin:0">A câmera fica ligada. Cada carta parada dentro do quadro é lida, conferida no banco de cartas de Pokémon e Lorcana e lançada na planilha. Troque a carta e a próxima entra.</p>
+        <button class="btn primary" id="btn-start" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+          Ligar câmera</button>
+        <p class="muted" id="start-msg" style="margin:0;font-size:13px">Comece com o quadro vazio: o scanner aprende a cor da mesa.</p>
+      </div>
+    </div>
+  </main>
+
+  <section class="panel" aria-label="Cartas desta sessão">
+    <div class="ctrls">
+      <button class="btn small" id="btn-pause" type="button" aria-pressed="false" disabled>Pausar</button>
+      <button class="btn small" id="btn-auto" type="button" aria-pressed="true">Lançar sozinho</button>
+      <button class="btn small" id="btn-calib" type="button" disabled>Mesa vazia</button>
+      <button class="btn small" id="btn-torch" type="button" aria-pressed="false" hidden>Lanterna</button>
+      <label class="btn small" for="in-photo">Foto</label>
+      <input type="file" id="in-photo" accept="image/*" capture="environment" hidden>
+    </div>
+    <div class="sumrow"><span id="sum-today">Nenhuma carta lançada hoje</span><a id="sheet-link" class="muted" href="https://docs.google.com/spreadsheets/d/1ZzNuZn28yoLjlzNR7_h9VTbkm3VgldDb12A0PzUngJ4/edit" target="_blank" rel="noopener">Abrir planilha ↗</a></div>
+    <div class="list" id="list"><div class="empty">As cartas lidas aparecem aqui, com a linha em que entraram na planilha. Toque em Desfazer se alguma entrou errada.</div></div>
+  </section>
+</div>
+
+<div class="sheet" id="setup" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="setup-h">
+    <h2 id="setup-h">Ligar o scanner à planilha</h2>
+    <p class="muted" style="margin:0">O jeito mais fácil: na planilha, abra o menu <b>Scanner › 2. Link para o celular</b> e aponte a câmera para o código. Ou cole os dois dados abaixo.</p>
+    <div class="f"><label for="cfg-api">URL do app da Web (termina em /exec)</label><input id="cfg-api" class="mono" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></div>
+    <div class="f"><label for="cfg-token">Código de acesso</label><input id="cfg-token" class="mono" autocomplete="off" placeholder="aparece em Scanner › 1. Configurar"></div>
+    <div class="note" id="setup-msg" hidden></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn primary" id="btn-save" type="button">Testar e salvar</button>
+      <button class="btn ghost" id="btn-close-setup" type="button">Fechar</button>
+    </div>
+    <details>
+      <summary class="muted" style="cursor:pointer">Ainda não configurei a planilha</summary>
+      <ol class="steps" style="margin-top:8px">
+        <li>Na planilha de estoque: Extensões › Apps Script. Apague o código de exemplo e cole o arquivo <span class="mono">Code.gs</span>. Salve.</li>
+        <li>Recarregue a planilha. Menu <b>Scanner › 1. Configurar</b>: autorize e cole a chave do Gemini (aistudio.google.com/apikey).</li>
+        <li>No Apps Script: Implantar › Nova implantação › App da Web. Executar como: Eu. Quem pode acessar: Qualquer pessoa. Implantar.</li>
+        <li>Menu <b>Scanner › 2. Link para o celular</b>: cole o URL do app da Web e leia o código com o celular.</li>
+      </ol>
+    </details>
+  </div>
+</div>
+
+<div class="sheet" id="settings" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="set-h">
+    <h2 id="set-h">Configurações</h2>
+    <div class="row2">
+      <div class="f"><label for="pref-cond">Condição padrão</label><select id="pref-cond"><option>NM</option><option>LP</option><option>MP</option><option>HP</option><option>DMG</option></select></div>
+      <div class="f"><label for="pref-site">Mostrar no site?</label><select id="pref-site"><option>Sim</option><option>Não</option></select></div>
+    </div>
+    <label class="toggle">Som e vibração ao lançar <input type="checkbox" id="pref-sound" checked></label>
+    <label class="toggle">Lançar sozinho as cartas conferidas no banco <input type="checkbox" id="pref-auto" checked></label>
+    <p class="muted" style="margin:0;font-size:13px">Com isso desligado, toda carta fica em “Revisar” até você tocar em Lançar.</p>
+    <div class="note" id="set-conn">Planilha: verificando…</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="btn-test" type="button">Testar conexão</button>
+      <button class="btn" id="btn-reconf" type="button">Trocar planilha ou código</button>
+      <button class="btn ghost" id="btn-clear" type="button">Limpar a lista</button>
+      <button class="btn primary" id="btn-close-set" type="button" style="margin-left:auto">Pronto</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(() => {
+"use strict";
+// ---------- settings ----------
+const LS = "nbcs-live-v1";
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(LS + ":" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(LS + ":" + k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(LS + ":" + k); } catch {} },
+};
+const cfg = store.get("cfg", { api: "", token: "" });
+const prefs = Object.assign({ condition: "NM", site: "Sim", sound: true, autoLog: true }, store.get("prefs", {}));
+
+// tuning (signature grid is SW x SH grey pixels of the guide area, sampled every TICK ms)
+const SW = 32, SH = 45, TICK = 100;
+const STILL_MAX = 4.5;     // mean grey change between ticks below this = the scene is still
+const STILL_N = 6;         // ticks still before a capture (~0.6 s)
+const CHANGE = 0.42;       // scene distance that counts as a different card
+const EMPTY_SAME = 0.30;   // distance to the calibrated table below this = empty
+const FLAT_STD = 9;        // a guide area this flat is an empty plain mat
+const MAX_INFLIGHT = 2;
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let toastT;
+function toast(m) { const t = $("#toast"); t.textContent = m; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200); }
+function setChip(state, text) { $("#chip-sheet").dataset.s = state; $("#chip-sheet-t").textContent = text; }
+const fmtTime = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+
+// ---------- sound ----------
+let actx = null;
+function beep(f = 880, d = .09, type = "sine", gain = .08) {
+  if (!prefs.sound || !actx) return;
+  try { const o = actx.createOscillator(), g = actx.createGain(); o.type = type; o.frequency.value = f; g.gain.value = gain; o.connect(g); g.connect(actx.destination); const t = actx.currentTime; g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.start(t); o.stop(t + d + .02); } catch {}
+}
+const buzz = p => { if (prefs.sound && navigator.vibrate) try { navigator.vibrate(p); } catch {} };
+const okSound = () => { beep(880, .08); setTimeout(() => beep(1320, .11), 90); buzz([25, 40, 25]); };
+const reviewSound = () => { beep(440, .16, "triangle"); buzz(60); };
+const errSound = () => { beep(220, .22, "square", .05); buzz([80, 60, 80]); };
+
+// ---------- backend (Apps Script web app) ----------
+async function api(action, payload = {}, timeout = 65000) {
+  if (!cfg.api || !cfg.token) throw { code: "no_config", message: "Ligue o scanner à planilha em Configurações." };
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout);
+  try {
+    const res = await fetch(cfg.api, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ token: cfg.token, action, ...payload }), signal: ctl.signal, redirect: "follow" });
+    const text = await res.text();
+    let j; try { j = JSON.parse(text); } catch { throw { code: "bad_reply", message: "O Apps Script respondeu algo inesperado. Confira se a implantação está como “Qualquer pessoa”." }; }
+    if (!j.ok) throw j;
+    return j;
+  } catch (e) {
+    if (e && e.name === "AbortError") throw { code: "timeout", message: "A planilha demorou demais para responder." };
+    if (e instanceof TypeError) throw { code: "network", message: navigator.onLine === false ? "Sem internet no celular." : "Não alcancei o Apps Script. Confira o URL e se a implantação está como “Qualquer pessoa”." };
+    throw e;
+  } finally { clearTimeout(t); }
+}
+
+// ---------- session list ----------
+const items = (store.get("items", []) || []).filter(x => x && x.id).slice(0, 80);
+items.forEach(x => { if (x.status === "reading") { x.status = "error"; x.error = "A leitura foi interrompida. Tente de novo."; } });
+const saveItems = () => store.set("items", items.slice(0, 80).map(({ images, sig, ...x }) => x));
+const STATUS = {
+  reading: ["info", "Lendo…"], logged: ["ok", "Na planilha"], review: ["warn", "Revisar"], error: ["err", "Erro"], undone: ["", "Desfeito"], sending: ["info", "Lançando…"],
+};
+const REASON = { duplicate: "Parece a mesma carta da leitura anterior.", low_confidence: "Leitura incerta: confira antes de lançar.", no_name: "Não consegui ler o nome.", manual: "Lançar sozinho está desligado." };
+function cardTitle(c) { return c ? (c.game === "Lorcana" && c.subtitle ? `${c.name} – ${c.subtitle}` : c.name) : ""; }
+function cardMeta(c) { return c ? [c.setCode || c.setName, c.number, c.language].filter(Boolean).join(" · ") : ""; }
+function render() {
+  const box = $("#list");
+  if (!items.length) { box.innerHTML = `<div class="empty">As cartas lidas aparecem aqui, com a linha em que entraram na planilha. Toque em Desfazer se alguma entrou errada.</div>`; renderSummary(); return; }
+  box.textContent = "";
+  for (const it of items) box.append(itemNode(it));
+  renderSummary();
+}
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function itemNode(it) {
+  const row = el("article", "it"); row.dataset.s = it.status;
+  const im = el("img"); im.alt = ""; im.src = it.thumb || (it.card && it.card.image) || ""; if (!im.src) im.removeAttribute("src");
+  const tx = el("div", "tx");
+  const name = el("b");
+  if (it.card) { const tg = el("span", "tag " + (it.card.game === "Lorcana" ? "lor" : "pok"), it.card.game === "Lorcana" ? "Lorcana" : "Pokémon"); name.append(tg, document.createTextNode(cardTitle(it.card) || "Sem nome")); }
+  else name.textContent = it.status === "reading" ? "Carta capturada" : "Carta";
+  const meta = el("div", "meta mono", it.card ? `${cardMeta(it.card)}${it.sku ? " · " + it.sku : ""}` : fmtTime(it.at));
+  const [cls, label] = STATUS[it.status] || ["", it.status];
+  const st = el("div", "st " + cls);
+  if (it.status === "reading" || it.status === "sending") st.append(el("span", "spin"));
+  let stText = label;
+  if (it.status === "logged" && it.logged) stText = `Na planilha · Movimentações linha ${it.logged.movRow}${it.logged.prodRow ? " · produto novo" : ""}${it.copy ? " · +1 cópia" : ""}`;
+  if (it.status === "review") stText = "Revisar: " + (REASON[it.reason] || "confira os dados.");
+  if (it.status === "error") stText = "Erro: " + (it.error || "falhou.");
+  if (it.status === "undone") stText = "Desfeito: saiu da planilha";
+  st.append(document.createTextNode(stText));
+  if (it.card && it.card.verified === false && it.status !== "undone") st.append(document.createTextNode(" · não achei no banco de cartas"));
+  tx.append(name, meta, st);
+  const acts = el("div", "acts");
+  const b = (label, fn, primary) => { const x = el("button", "btn small" + (primary ? " primary" : " ghost"), label); x.type = "button"; x.addEventListener("click", fn); acts.append(x); return x; };
+  if (it.status === "logged") { b("Desfazer", () => undo(it)); b("+1 cópia", () => addCopy(it)); }
+  if (it.status === "review") {
+    b("Lançar", () => logItem(it), true);
+    if (it.reason === "duplicate") b("Ignorar", () => drop(it)); else b("Editar", () => { it.editing = !it.editing; render(); });
+    for (const c of (it.candidates || []).slice(0, 3)) b(`É ${c.name} · ${c.setCode || ""} ${c.number || ""}`.trim(), () => { applyCandidate(it, c); logItem(it); });
+  }
+  if (it.status === "error") { if (it.images) b("Tentar de novo", () => { it.status = "reading"; it.error = ""; render(); enqueue(it); }, true); if (it.card) b("Editar", () => { it.editing = !it.editing; render(); }); b("Descartar", () => drop(it)); }
+  if (it.status === "review" && it.reason !== "duplicate") b("Descartar", () => drop(it));
+  if (acts.childElementCount) tx.append(acts);
+  if (it.editing && it.card) tx.append(editForm(it));
+  row.append(im, tx);
+  return row;
+}
+function editForm(it) {
+  const c = it.card; const f = el("div", "edit");
+  const field = (k, label, opts, wide) => {
+    const l = el("label", wide ? "w" : ""); l.append(document.createTextNode(label));
+    let i;
+    if (opts) { i = el("select"); for (const o of opts) { const op = el("option", "", o); i.append(op); } }
+    else { i = el("input"); i.autocomplete = "off"; }
+    i.value = c[k] || ""; i.addEventListener("input", () => { c[k] = i.value; it.sku = ""; c.sku = ""; it.match = null; });
+    l.append(i); f.append(l);
+  };
+  field("game", "Jogo", ["Pokémon", "Lorcana"]); field("language", "Idioma", ["PT", "EN", "JP", "ES", "FR", "DE", "IT", "KO", "ZH"]);
+  field("name", "Nome", null, true); if (c.game === "Lorcana") field("subtitle", "Versão", null, true);
+  field("setCode", "Código da coleção"); field("number", "Nº da carta");
+  field("rarity", "Raridade"); field("condition", "Condição");
+  const q = el("label"); q.append(document.createTextNode("Quantidade")); const qi = el("input"); qi.type = "number"; qi.min = "1"; qi.value = it.qty || 1; qi.inputMode = "numeric"; qi.addEventListener("input", () => it.qty = Math.max(1, parseInt(qi.value, 10) || 1)); q.append(qi); f.append(q);
+  const cst = el("label"); cst.append(document.createTextNode("Custo pago R$")); const ci = el("input"); ci.inputMode = "decimal"; ci.placeholder = "opcional"; ci.value = it.cost || ""; ci.addEventListener("input", () => it.cost = ci.value); cst.append(ci); f.append(cst);
+  return f;
+}
+function renderSummary() {
+  const now = Date.now();
+  const today = items.filter(x => x.status === "logged" && sameDay(x.at, now));
+  const qty = today.reduce((s, x) => s + (x.qty || 1), 0);
+  const review = items.filter(x => x.status === "review").length;
+  $("#sum-today").textContent = (qty ? `${qty} carta${qty > 1 ? "s" : ""} lançada${qty > 1 ? "s" : ""} hoje` : "Nenhuma carta lançada hoje") + (review ? ` · ${review} para revisar` : "");
+}
+
+// ---------- identification queue ----------
+const queue = []; let inflight = 0; let quotaUntil = 0;
+function enqueue(it) { queue.push(it); pump(); }
+function pump() {
+  while (inflight < MAX_INFLIGHT && queue.length) {
+    const it = queue.shift(); inflight++;
+    identify(it).finally(() => { inflight--; pump(); });
+  }
+}
+async function identify(it) {
+  it.status = "reading"; render();
+  try {
+    const r = await api("scan", { id: it.id, images: it.images, prefs: { autoLog: prefs.autoLog, condition: prefs.condition, site: prefs.site, avoidSku: it.guardSku || "" } });
+    if (r.isCard === false) {
+      // the scanner fired on an empty table or a hand: learn this as the empty table and drop the entry
+      if (it.sig) bg = it.sig;
+      const i = items.indexOf(it); if (i >= 0) items.splice(i, 1);
+      toast("Não vi carta ali: aprendi isso como a mesa vazia.");
+      saveItems(); render(); return;
+    }
+    Object.assign(it, { card: r.card, sku: r.sku, match: r.match, candidates: r.candidates || [], logged: r.logged || null, reason: r.reason || "" });
+    it.status = r.logged ? "logged" : "review";
+    if (r.logged) { lastSku = r.sku; okSound(); banner(`✓ ${cardTitle(r.card)} · +1 no estoque`, "ok"); }
+    else { if (r.reason !== "duplicate") lastSku = r.sku; reviewSound(); banner(`Revisar: ${cardTitle(r.card) || "carta"}`, "warn"); }
+    if (r.logged) setChip("ok", "Planilha");
+    delete it.images;
+  } catch (e) {
+    it.status = "error"; it.error = (e && e.message) || "Falhou.";
+    if (e && e.code === "quota") { quotaUntil = Date.now() + 45000; }
+    if (e && (e.code === "bad_token" || e.code === "no_config")) { setChip("err", "Código inválido"); }
+    else if (e && (e.code === "network" || e.code === "timeout")) setChip("warn", "Sem resposta");
+    errSound(); banner("Erro: " + it.error, "err");
+  }
+  saveItems(); render();
+}
+async function logItem(it) {
+  if (!it.card || !it.card.name) { it.editing = true; render(); toast("Preencha o nome antes de lançar."); return; }
+  it.status = "sending"; render();
+  try {
+    const r = await api("log", { id: it.id, card: it.card, useSku: (it.match && it.match.sku) || "", prefs: { qty: it.qty || 1, cost: it.cost || "", site: prefs.site } });
+    Object.assign(it, { status: "logged", logged: r.logged, sku: r.sku, editing: false });
+    lastSku = r.sku; okSound();
+  } catch (e) { it.status = "error"; it.error = (e && e.message) || "Não lançou."; errSound(); }
+  saveItems(); render();
+}
+async function addCopy(src) {
+  const it = { id: uid(), at: Date.now(), status: "sending", thumb: src.thumb, card: { ...src.card }, sku: src.sku, match: { sku: src.sku }, copy: true, qty: 1 };
+  items.unshift(it); render();
+  try { const r = await api("log", { id: it.id, card: it.card, useSku: src.sku, prefs: { qty: 1, site: prefs.site } }); Object.assign(it, { status: "logged", logged: r.logged, sku: r.sku }); okSound(); }
+  catch (e) { it.status = "error"; it.error = (e && e.message) || "Não lançou."; errSound(); }
+  saveItems(); render();
+}
+async function undo(it) {
+  it.status = "sending"; render();
+  try { await api("undo", { id: it.id }); it.status = "undone"; toast("Desfeito: a entrada saiu da planilha."); }
+  catch (e) { it.status = "logged"; toast((e && e.message) || "Não consegui desfazer."); }
+  saveItems(); render();
+}
+function drop(it) { const i = items.indexOf(it); if (i >= 0) items.splice(i, 1); saveItems(); render(); }
+function applyCandidate(it, c) {
+  const k = it.card;
+  if (k.language === "EN" || !k.name) k.name = c.name;
+  if (c.subtitle) k.subtitle = c.subtitle;
+  Object.assign(k, { setName: c.setName || k.setName, setCode: c.setCode || k.setCode, rarity: c.rarity || k.rarity, image: c.image || k.image, verified: true });
+  if (c.number) k.number = String(k.number || "").includes("/") && !String(c.number).includes("/") ? c.number + "/" + String(k.number).split("/")[1] : c.number;
+  it.match = null; k.sku = "";
+}
+
+// ---------- camera ----------
+const video = $("#video");
+let stream = null, track = null, camOn = false, paused = false, wake = null;
+async function startCamera() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("#start-msg").textContent = "Este navegador não liga a câmera aqui. Abra a página no Chrome ou no Safari, pelo endereço https."; return; }
+  $("#start-msg").textContent = "Pedindo a câmera…";
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  } catch (e) {
+    const n = e && e.name;
+    $("#start-msg").textContent = n === "NotAllowedError" ? "A câmera foi bloqueada. Libere a câmera para este site nas configurações do navegador e toque de novo." : n === "NotFoundError" ? "Não achei câmera neste aparelho." : "Não consegui ligar a câmera (" + (n || "erro") + ").";
+    return;
+  }
+  track = stream.getVideoTracks()[0];
+  video.srcObject = stream;
+  try { await video.play(); } catch {}
+  await new Promise(r => video.readyState >= 2 ? r() : video.addEventListener("loadeddata", r, { once: true }));
+  try { const caps = track.getCapabilities ? track.getCapabilities() : {}; if (caps.focusMode && caps.focusMode.includes("continuous")) await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); $("#btn-torch").hidden = !caps.torch; } catch {}
+  camOn = true; paused = false;
+  $("#start").hidden = true; $("#guide").hidden = false; $("#status").hidden = false;
+  $("#btn-pause").disabled = false; $("#btn-calib").disabled = false;
+  layout(); keepAwake(); loop(); render();
+}
+function stopCamera() { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; track = null; camOn = false; }
+async function keepAwake() { try { if ("wakeLock" in navigator && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => wake = null); } } catch {} }
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { if (camOn) { stopCamera(); resumeOnShow = true; } }
+  else if (resumeOnShow) { resumeOnShow = false; startCamera(); }
+});
+let resumeOnShow = false;
+
+// ---------- guide geometry (video pixels <-> screen) ----------
+let guide = null;
+function layout() {
+  const vw = video.videoWidth, vh = video.videoHeight; if (!vw || !vh) return;
+  const st = $("#stage"); const cw = st.clientWidth, ch = st.clientHeight;
+  const s = Math.max(cw / vw, ch / vh), offX = (cw - vw * s) / 2, offY = (ch - vh * s) / 2;
+  const visX = -offX / s, visY = -offY / s, visW = cw / s, visH = ch / s;
+  const reserveTop = 58 / s, reserveBot = 18 / s;               // room for the status pill
+  const availH = Math.max(visH * .5, visH - reserveTop - reserveBot);
+  let gh = availH * .9, gw = gh * 63 / 88;
+  if (gw > visW * .84) { gw = visW * .84; gh = gw * 88 / 63; }
+  const gx = visX + (visW - gw) / 2, gy = visY + reserveTop + (availH - gh) / 2;
+  guide = { x: Math.max(0, gx), y: Math.max(0, gy), w: Math.min(gw, vw), h: Math.min(gh, vh) };
+  const g = $("#guide");
+  Object.assign(g.style, { left: (guide.x * s + offX) + "px", top: (guide.y * s + offY) + "px", width: (guide.w * s) + "px", height: (guide.h * s) + "px" });
+}
+// a new guide means new signatures: forget the learned table and the last card
+let lastBox = "";
+new ResizeObserver(() => {
+  if (!camOn) return;
+  const st = $("#stage"), key = st.clientWidth + "x" + st.clientHeight;
+  if (key === lastBox) return;
+  lastBox = key; layout(); bg = null; lastSig = null; sawEmpty = true; prev = null; still = 0;
+}).observe($("#stage"));
+
+// ---------- detector ----------
+const sigC = Object.assign(document.createElement("canvas"), { width: SW, height: SH });
+const sigX = sigC.getContext("2d", { willReadFrequently: true });
+function signature() {
+  sigX.drawImage(video, guide.x, guide.y, guide.w, guide.h, 0, 0, SW, SH);
+  const d = sigX.getImageData(0, 0, SW, SH).data, n = SW * SH, v = new Float32Array(n);
+  let sum = 0; for (let i = 0; i < n; i++) { const y = d[i * 4] * .299 + d[i * 4 + 1] * .587 + d[i * 4 + 2] * .114; v[i] = y; sum += y; }
+  const mean = sum / n; let ss = 0; for (let i = 0; i < n; i++) ss += (v[i] - mean) ** 2;
+  const std = Math.sqrt(ss / n), k = 1 / Math.max(std, 4), z = new Float32Array(n);
+  for (let i = 0; i < n; i++) z[i] = (v[i] - mean) * k;
+  return { v, z, std, mean };
+}
+function rawDiff(a, b) { let s = 0; for (let i = 0; i < a.v.length; i++) s += Math.abs(a.v[i] - b.v[i]); return s / a.v.length; }
+function normDiff(a, b) { let s = 0; for (let i = 0; i < a.z.length; i++) s += Math.abs(a.z[i] - b.z[i]); return s / a.z.length; }
+// distance between two scenes, 0 = same; ~1 = unrelated. Exposure changes barely move it.
+function sceneDiff(a, b) { return a.std >= 10 && b.std >= 10 ? normDiff(a, b) : rawDiff(a, b) / 35; }
+
+let prev = null, still = 0, bg = null, lastSig = null, sawEmpty = true, capturing = false, lastSku = "", statusKey = "";
+function isEmpty(s) { return s.std < FLAT_STD || (bg && sceneDiff(s, bg) < EMPTY_SAME); }
+let bannerUntil = 0;
+function banner(text, kind) { bannerUntil = Date.now() + 2600; const st = $("#status"); st.textContent = text; st.dataset.k = kind; statusKey = "banner"; }
+function setStatus(key, text, guideState, holdPct = 0) {
+  if (Date.now() < bannerUntil && key !== "shot") { $("#guide").dataset.s = guideState || ""; $("#hold-bar").style.width = Math.round(holdPct * 100) + "%"; return; }
+  if (statusKey !== key + text) { const st = $("#status"); st.textContent = text; st.dataset.k = ""; statusKey = key + text; }
+  $("#guide").dataset.s = guideState || "";
+  $("#hold-bar").style.width = Math.round(holdPct * 100) + "%";
+}
+let loopT = null;
+function loop() {
+  clearTimeout(loopT);
+  if (!camOn) return;
+  loopT = setTimeout(loop, TICK);
+  if (paused || capturing || !guide || video.readyState < 2) return;
+  if (Date.now() < quotaUntil) { setStatus("quota", `Limite do Gemini: volto em ${Math.ceil((quotaUntil - Date.now()) / 1000)} s`, ""); return; }
+  if (inflight + queue.length >= 4) { setStatus("busy", "Aguarde: lendo as cartas anteriores…", ""); return; }
+  const cur = signature();
+  const motion = prev ? rawDiff(cur, prev) : 99; prev = cur;
+  still = motion < STILL_MAX ? still + 1 : 0;
+  if (!bg && still >= STILL_N + 4 && cur.std < 16 && !lastSig) { bg = cur; toast("Mesa calibrada."); }
+  if (isEmpty(cur)) {
+    if (still >= 2) sawEmpty = true;
+    setStatus("place", "Coloque uma carta no quadro", "");
+    return;
+  }
+  const changed = !lastSig || sceneDiff(cur, lastSig) > CHANGE;
+  if (!changed && !sawEmpty) { setStatus("swap", "Lida. Troque pela próxima carta", "swap"); return; }
+  if (still < STILL_N) { setStatus("hold", still ? "Segure firme…" : "Carta detectada", "hold", still / STILL_N); return; }
+  capture(cur, !sawEmpty && !!lastSig);
+}
+
+// ---------- capture ----------
+function grabCrop() {
+  const vw = video.videoWidth, vh = video.videoHeight, m = .05;
+  const x = Math.max(0, guide.x - guide.w * m), y = Math.max(0, guide.y - guide.h * m);
+  const w = Math.min(vw - x, guide.w * (1 + 2 * m)), h = Math.min(vh - y, guide.h * (1 + 2 * m));
+  const k = Math.min(1, 1600 / h);
+  const c = Object.assign(document.createElement("canvas"), { width: Math.round(w * k), height: Math.round(h * k) });
+  c.getContext("2d").drawImage(video, x, y, w, h, 0, 0, c.width, c.height);
+  return c;
+}
+function sharpness(c) {
+  const W = 180, H = Math.round(c.height * W / c.width);
+  const t = Object.assign(document.createElement("canvas"), { width: W, height: H }); const x = t.getContext("2d", { willReadFrequently: true });
+  x.drawImage(c, 0, 0, W, H); const d = x.getImageData(0, 0, W, H).data;
+  const g = new Float32Array(W * H); for (let i = 0; i < W * H; i++) g[i] = d[i * 4] * .3 + d[i * 4 + 1] * .59 + d[i * 4 + 2] * .11;
+  let s = 0, s2 = 0, n = 0;
+  for (let yy = 1; yy < H - 1; yy++) for (let xx = 1; xx < W - 1; xx++) { const i = yy * W + xx; const l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - W] - g[i + W]; s += l; s2 += l * l; n++; }
+  return s2 / n - (s / n) ** 2;
+}
+function encode(src, sx, sy, sw, sh, maxH, q) {
+  const k = Math.min(1, maxH / sh);
+  const c = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(sw * k)), height: Math.max(1, Math.round(sh * k)) });
+  c.getContext("2d").drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", q);
+}
+function pack(c) {
+  const main = encode(c, 0, 0, c.width, c.height, 1100, .85).split(",")[1];
+  const by = Math.round(c.height * .72);
+  const bottom = encode(c, 0, by, c.width, c.height - by, 520, .9).split(",")[1];
+  const thumb = encode(c, 0, 0, c.width, c.height, 160, .7);
+  return { images: [main, bottom], thumb };
+}
+async function capture(sig, guarded) {
+  capturing = true;
+  setStatus("shot", "Capturando…", "shot", 1);
+  const fl = $("#flash"); fl.classList.remove("go"); void fl.offsetWidth; fl.classList.add("go");
+  beep(1200, .03, "sine", .04);
+  try {
+    let best = null;
+    for (let i = 0; i < 3; i++) { const c = grabCrop(); const s = sharpness(c); if (!best || s > best.s) best = { c, s }; if (i < 2) await sleep(70); }
+    const { images, thumb } = pack(best.c);
+    const it = { id: uid(), at: Date.now(), status: "reading", thumb, images, sig, guardSku: guarded ? lastSku : "", qty: 1 };
+    items.unshift(it); if (items.length > 80) items.length = 80;
+    render(); enqueue(it);
+  } finally {
+    lastSig = sig; sawEmpty = false; still = 0; capturing = false;
+  }
+}
+
+// photo fallback (no live camera, or a tricky card)
+async function fromFile(file) {
+  try {
+    const url = URL.createObjectURL(file);
+    const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = Object.assign(document.createElement("canvas"), { width: Math.round(im.naturalWidth * k), height: Math.round(im.naturalHeight * k) });
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    const { images, thumb } = pack(c);
+    const it = { id: uid(), at: Date.now(), status: "reading", thumb, images, qty: 1 };
+    items.unshift(it); render(); enqueue(it);
+  } catch { toast("Não consegui abrir essa foto. Tente em JPG."); }
+}
+
+// ---------- setup / settings ----------
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const a = h.get("api"), t = h.get("token");
+  if (a && t) { cfg.api = a; cfg.token = t; store.set("cfg", cfg); history.replaceState(null, "", location.pathname + location.search); return true; }
+  return false;
+}
+async function checkConnection(showSetupMsg) {
+  if (!cfg.api || !cfg.token) { setChip("err", "Não ligada"); return false; }
+  setChip("idle", "Planilha…");
+  try {
+    const r = await api("ping", {}, 30000);
+    setChip(r.hasKey ? "ok" : "warn", r.hasKey ? "Planilha" : "Falta chave");
+    $("#set-conn").className = "note " + (r.hasKey ? "ok" : "err");
+    $("#set-conn").textContent = r.hasKey ? `Ligado a “${r.sheet}” · ${r.products} produtos${r.model ? " · " + r.model : ""}` : "Planilha ligada, mas falta a chave do Gemini: menu Scanner › 1. Configurar.";
+    if (showSetupMsg) { $("#setup-msg").hidden = false; $("#setup-msg").className = "note ok"; $("#setup-msg").textContent = $("#set-conn").textContent; }
+    return true;
+  } catch (e) {
+    setChip("err", e.code === "bad_token" ? "Código inválido" : "Sem conexão");
+    $("#set-conn").className = "note err"; $("#set-conn").textContent = e.message || "Sem conexão.";
+    if (showSetupMsg) { $("#setup-msg").hidden = false; $("#setup-msg").className = "note err"; $("#setup-msg").textContent = e.message || "Sem conexão."; }
+    return false;
+  }
+}
+function openSetup() { $("#cfg-api").value = cfg.api || ""; $("#cfg-token").value = cfg.token || ""; $("#setup-msg").hidden = true; $("#setup").hidden = false; }
+function openSettings() {
+  $("#pref-cond").value = prefs.condition; $("#pref-site").value = prefs.site; $("#pref-sound").checked = prefs.sound; $("#pref-auto").checked = prefs.autoLog;
+  $("#settings").hidden = false; checkConnection(false);
+}
+function savePrefs() { store.set("prefs", prefs); $("#btn-auto").setAttribute("aria-pressed", String(prefs.autoLog)); $("#btn-auto").textContent = prefs.autoLog ? "Lançar sozinho" : "Revisar antes"; }
+
+function bind() {
+  $("#btn-start").addEventListener("click", startCamera);
+  $("#btn-settings").addEventListener("click", openSettings);
+  $("#btn-pause").addEventListener("click", () => { paused = !paused; $("#btn-pause").setAttribute("aria-pressed", String(paused)); $("#btn-pause").textContent = paused ? "Retomar" : "Pausar"; if (paused) setStatus("pause", "Pausado", ""); });
+  $("#btn-auto").addEventListener("click", () => { prefs.autoLog = !prefs.autoLog; savePrefs(); toast(prefs.autoLog ? "Cartas conferidas entram sozinhas." : "Toda carta vai para Revisar."); });
+  $("#btn-calib").addEventListener("click", () => { if (!guide) return; bg = signature(); lastSig = null; sawEmpty = true; toast("Mesa vazia calibrada."); });
+  $("#btn-torch").addEventListener("click", async () => { const on = $("#btn-torch").getAttribute("aria-pressed") !== "true"; try { await track.applyConstraints({ advanced: [{ torch: on }] }); $("#btn-torch").setAttribute("aria-pressed", String(on)); } catch { toast("A lanterna não ligou."); } });
+  $("#in-photo").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; if (f) fromFile(f); e.target.value = ""; });
+  $("#btn-save").addEventListener("click", async () => {
+    cfg.api = $("#cfg-api").value.trim(); cfg.token = $("#cfg-token").value.trim();
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(cfg.api)) { $("#setup-msg").hidden = false; $("#setup-msg").className = "note err"; $("#setup-msg").textContent = "O URL começa com https://script.google.com/macros/s/ e termina em /exec."; return; }
+    store.set("cfg", cfg);
+    if (await checkConnection(true)) setTimeout(() => $("#setup").hidden = true, 900);
+  });
+  $("#btn-close-setup").addEventListener("click", () => $("#setup").hidden = true);
+  $("#btn-close-set").addEventListener("click", () => {
+    prefs.condition = $("#pref-cond").value; prefs.site = $("#pref-site").value; prefs.sound = $("#pref-sound").checked; prefs.autoLog = $("#pref-auto").checked;
+    savePrefs(); $("#settings").hidden = true;
+  });
+  $("#btn-test").addEventListener("click", () => checkConnection(false));
+  $("#btn-reconf").addEventListener("click", () => { $("#settings").hidden = true; openSetup(); });
+  $("#btn-clear").addEventListener("click", () => { if (confirm("Limpar a lista deste aparelho? A planilha não muda.")) { items.length = 0; saveItems(); render(); } });
+}
+
+bind(); savePrefs(); readHash(); render();
+if (!cfg.api || !cfg.token) openSetup(); else checkConnection(false);
+// test hook: lets the automated check read the detector state
+window.__nbcs = { get state() { return { bg: !!bg, lastSku, sawEmpty, items: items.map(x => ({ id: x.id, status: x.status, sku: x.sku, guardSku: x.guardSku })) }; } };
+})();
+</script>
+</body>
+</html>
